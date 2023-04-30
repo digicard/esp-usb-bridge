@@ -40,7 +40,7 @@ static dedic_gpio_bundle_handle_t gpio_out_bundle;
 /* inputs */
 #define GPIO_TDO_MASK       0x01
 
-#define USB_RCVBUF_SIZE             4096
+#define USB_RCVBUF_SIZE             (64*1024) //16384 //8192//4096
 #define USB_SNDBUF_SIZE             (32*1024)
 
 #define ROUND_UP_BITS(x)            ((x + 7) & (~7))
@@ -408,6 +408,8 @@ static void jtag_task(void *pvParameters)
 
 void jtag_init(void)
 {
+    init_jtag_gpio();
+
     usb_rcvbuf = xRingbufferCreate(USB_RCVBUF_SIZE, RINGBUF_TYPE_BYTEBUF);
     if (!usb_rcvbuf) {
         ESP_LOGE(TAG, "Cannot allocate USB receive buffer!");
@@ -426,10 +428,7 @@ void jtag_init(void)
         eub_abort();
     }
 
-    /* dedicated GPIO will be binded to the CPU who invokes this API */
-    /* we will create a jtag task pinned to this core */
-    init_jtag_gpio();
-    if (xTaskCreatePinnedToCore(jtag_task, "jtag_task", 4 * 1024, NULL, 5, NULL, esp_cpu_get_core_id()) != pdPASS) {
+    if (xTaskCreate(jtag_task, "jtag_task", 4 * 1024, NULL, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "Cannot create JTAG task!");
         eub_abort();
     }
