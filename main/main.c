@@ -23,7 +23,7 @@
 #include "msc.h"
 #include "hal/usb_hal.h"
 #include "soc/usb_periph.h"
-#include "rom/gpio.h"
+#include "esp32s2/rom/gpio.h"
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 #include "esp_idf_version.h"
@@ -31,7 +31,29 @@
 #include "esp_mac.h"
 #include "esp_private/periph_ctrl.h"
 
+#include "io.h"
+
+#include "led_strip.h"
+
+
+// // GPIO assignment
+#define BLINK_GPIO CONFIG_RGB_BLINK_GPIO
+#define RGB_COLOR_BRIGHTNESS   CONFIG_RGB_BRIGHNESS
+
+// // LED numbers in the strip
+#define LED_STRIP_LED_NUMBERS 1
+
+// // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
+#define LED_STRIP_RMT_RES_HZ   (10 * 1000 * 1000)
+
 static const char *TAG = "bridge_main";
+
+typedef struct  {
+  uint8_t             color;
+  led_strip_handle_t  led_strip;
+} Task_params;
+
+static Task_params  task_params;
 
 #define EPNUM_CDC       2
 #define EPNUM_VENDOR    3
@@ -206,6 +228,37 @@ static void tusb_device_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+void rgb_led_task(Task_params *p)
+{
+  for(;;) {
+    // Task code goes here.   
+    p->color++; 
+    p->color &= 0x03;
+
+    switch(p->color) {
+      case 0:
+        ESP_ERROR_CHECK(led_strip_clear(p->led_strip));
+        break;
+
+      case 1:
+        ESP_ERROR_CHECK(led_strip_set_pixel(p->led_strip, 0, RGB_COLOR_BRIGHTNESS, 0, 0));
+        break;
+
+      case 2:
+        ESP_ERROR_CHECK(led_strip_set_pixel(p->led_strip, 0, 0, RGB_COLOR_BRIGHTNESS, 0));
+        break;
+
+      case 3:
+        ESP_ERROR_CHECK(led_strip_set_pixel(p->led_strip, 0, 0, 0, RGB_COLOR_BRIGHTNESS));
+        break;
+    };
+    // ESP_LOGI(TAG, "RGB Color %u, handle: %d", p->color, (unsigned int)p->led_strip);
+
+    // vTaskDelay(CONFIG_RGB_BLINK_PERIOD / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_RGB_BLINK_PERIOD));
+  }
+}
+
 static void init_led_gpios(void)
 {
     gpio_config_t io_conf = {};
@@ -216,6 +269,41 @@ static void init_led_gpios(void)
     io_conf.pull_down_en = 0;
     io_conf.pull_up_en = 0;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+    gpio_set_level(CONFIG_BRIDGE_GPIO_LED1, !CONFIG_BRIDGE_GPIO_LED1_ACTIVE);
+    gpio_set_level(CONFIG_BRIDGE_GPIO_LED2, !CONFIG_BRIDGE_GPIO_LED2_ACTIVE);
+    gpio_set_level(CONFIG_BRIDGE_GPIO_LED3, !CONFIG_BRIDGE_GPIO_LED3_ACTIVE);
+
+    gpio_set_level(LED_TX, LED_TX_ON);
+    gpio_set_level(LED_RX, LED_RX_ON);
+    gpio_set_level(LED_JTAG, LED_JTAG_ON);
+
+    task_params.color = 0;
+
+    ESP_LOGI(TAG, "RGB LED on GPIO%d, %d LEDs, Brightness %d, %dMHz", BLINK_GPIO, LED_STRIP_LED_NUMBERS, CONFIG_RGB_BRIGHNESS, LED_STRIP_RMT_RES_HZ/(1000 * 1000));
+
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = BLINK_GPIO,             // The GPIO that connected to the LED strip's data line
+        .max_leds = LED_STRIP_LED_NUMBERS,        // The number of LEDs in the strip,
+        .led_pixel_format = LED_PIXEL_FORMAT_GRB, // Pixel format of your LED strip
+        .led_model = LED_MODEL_WS2812,            // LED strip model
+        .flags.invert_out = false,                // whether to invert the output signal
+    };
+
+    // LED strip backend configuration: RMT
+    led_strip_rmt_config_t rmt_config = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
+        .resolution_hz = LED_STRIP_RMT_RES_HZ, // RMT counter clock frequency
+        .flags.with_dma = false,               // DMA feature is available on ESP target like ESP32-S3
+    };
+
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &task_params.led_strip));
+    led_strip_clear(task_params.led_strip);
+
+    xTaskCreate( (void (*)(void*))  rgb_led_task, "rgb_Led_task", 4 * 1024, &task_params, tskIDLE_PRIORITY, NULL );
+
+    // vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
     gpio_set_level(CONFIG_BRIDGE_GPIO_LED1, !CONFIG_BRIDGE_GPIO_LED1_ACTIVE);
     gpio_set_level(CONFIG_BRIDGE_GPIO_LED2, !CONFIG_BRIDGE_GPIO_LED2_ACTIVE);
