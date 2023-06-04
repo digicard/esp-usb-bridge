@@ -44,6 +44,7 @@
 #include "sdkconfig.h"
 #include "driver/gpio.h"
 #include "io.h"
+#include "rgb_status.h"
 
 #define FAT_CLUSTERS                    (6 * 1024)
 #define FAT_SECTORS_PER_CLUSTER         8
@@ -223,10 +224,12 @@ bool tud_msc_start_stop_cb(const uint8_t lun, const uint8_t power_condition, con
 
     if (load_eject) {
         if (start) {
+          rgb_status_set(1, 1);
             // load disk storage
         } else {
-            // unload disk storage
-            ejected = true;
+          // unload disk storage
+          rgb_status_set(1, 0);
+          ejected = true;
         }
     }
 

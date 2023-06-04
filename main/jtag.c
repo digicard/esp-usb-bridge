@@ -28,6 +28,8 @@
 #include "util.h"
 #include "io.h"
 
+#include "rgb_status.h"
+
 static dedic_gpio_bundle_handle_t gpio_in_bundle;
 static dedic_gpio_bundle_handle_t gpio_out_bundle;
 
@@ -125,6 +127,13 @@ void tud_vendor_rx_cb(uint8_t itf)
 void tud_mount_cb(void)
 {
     ESP_LOGI(TAG, "Mounted");
+    rgb_status_set(1, 1);
+    xTaskNotifyGive(s_usb_tx_task_handle);
+}
+
+void tud_umount_cb(void)
+{
+    ESP_LOGI(TAG, "Unmounted");
     xTaskNotifyGive(s_usb_tx_task_handle);
 }
 
@@ -202,6 +211,7 @@ static void init_jtag_gpio(void)
     dedic_gpio_cpu_ll_write_mask(GPIO_TCK_MASK, 0);
 
     ESP_LOGI(TAG, "JTAG GPIO init done");
+    rgb_status_set(3, 1);
 }
 
 static void usb_send_task(void *pvParameters)

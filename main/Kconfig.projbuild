@@ -34,11 +34,11 @@ menu "Bridge Configuration"
 
   config BRIDGE_GPIO_TDI
       int "GPIO pin for the target TDI signal"
-      default 3
+      default 9
 
   config BRIDGE_GPIO_TDO
       int "GPIO pin for the target TDO signal"
-      default 9
+      default 3
 
   config BRIDGE_GPIO_TCK
       int "GPIO pin for the target TCK signal"
@@ -82,7 +82,7 @@ menu "Bridge Configuration"
   config RGB_BRIGHNESS
     int "RGB LED brightness (0-255)"
     range 0 255
-    default 128
+    default 32
     help
         Define the relative brightness of the RGB LED.
 
